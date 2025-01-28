@@ -10,6 +10,12 @@ pipeline {
 
     stages {
         stage('Verificar rama activa y restaurar backup') {
+            agent {
+                docker {
+                    image 'amazon/aws-cli:2.23.7' // Imagen oficial con AWS CLI
+                    args '--entrypoint ""'
+                }
+            }
             steps {
                 script {
                     // Verificar que se está ejecutando en la rama main
@@ -22,7 +28,7 @@ pipeline {
                     // Listar el contenido del bucket para depuración
                     echo "Listando contenido en ${BACKUP_BUCKET}/JesusRamirez/ para depuración..."
                     sh """
-                        aws s3 ls s3://${BACKUP_BUCKET}/JesusRamirez/
+                        aws s3 ls s3://${BACKUP_BUCKET}/JesusRamirez/ --region ${AWS_REGION}
                     """
 
                     // Buscar el directorio más reciente
@@ -30,7 +36,7 @@ pipeline {
                     def latestDir = sh(
                         returnStdout: true,
                         script: """
-                            aws s3 ls s3://${BACKUP_BUCKET}/JesusRamirez/ | awk '{print \$2}' | sort -r | head -n 1 | tr -d '/'
+                            aws s3 ls s3://${BACKUP_BUCKET}/JesusRamirez/ --region ${AWS_REGION} | awk '{print \$2}' | sort -r | head -n 1 | tr -d '/'
                         """
                     ).trim()
                     echo "El directorio más reciente encontrado es: ${latestDir}"
@@ -39,13 +45,13 @@ pipeline {
                         // Limpiar el contenido del bucket principal
                         echo "Eliminando contenido actual del bucket principal ${S3_BUCKET}..."
                         sh """
-                            aws s3 rm s3://${S3_BUCKET}/ --recursive
+                            aws s3 rm s3://${S3_BUCKET}/ --recursive --region ${AWS_REGION}
                         """
 
                         // Restaurar contenido desde el backup
                         echo "Restaurando contenido desde ${BACKUP_BUCKET}/JesusRamirez/${latestDir} a ${S3_BUCKET}..."
                         sh """
-                            aws s3 sync s3://${BACKUP_BUCKET}/JesusRamirez/${latestDir}/ s3://${S3_BUCKET}/
+                            aws s3 sync s3://${BACKUP_BUCKET}/JesusRamirez/${latestDir}/ s3://${S3_BUCKET}/ --region ${AWS_REGION}
                         """
                     } else {
                         echo "No se encontró ningún directorio de respaldo. Restauración omitida."
@@ -63,4 +69,3 @@ pipeline {
             echo "El pipeline falló. Revisa los errores."
         }
     }
-}
