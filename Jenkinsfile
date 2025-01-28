@@ -27,86 +27,11 @@ pipeline {
                 sh 'npm run build'
             }
         }
+    
 
-        // stage('Validar imagen de AWS ...') {
-        //     agent {
-        //         docker { 
-        //             image 'amazon/aws-cli:2.23.7'
-        //             args '--entrypoint ""'
-        //         }
-        //     }
-        //     steps {
-        //         echo "Usando aws CLI.."
-        //         sh 'aws --version'
-        //     }
-        // }
-
-        // stage('Validar conexión AWS ...') {
-        //     when {
-        //         not { branch 'develop' } // Ejecutar si NO es la rama `develop`
-        //     }
-        //     agent {
-        //         docker { 
-        //             image 'amazon/aws-cli:2.23.7'
-        //             args '--entrypoint ""'
-        //         }
-        //     }
-        //     steps {
-        //         withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
-        //             script {
-        //                 def buckets = sh(returnStdout: true, script: 'aws s3 ls').trim()
-        //                 echo "Buckets disponibles en AWS: \n${buckets}"
-        //             }
-        //         }
-        //     }
-        // }
-
-        stage('Preparar estructura de buckets y realizar backup (solo main)') {
+        stage('Restaurar último backup a bucket principal (solo main)') {
             when {
                 branch 'main' // Ejecutar solo si la rama es `main`
-            }
-            agent {
-                docker { 
-                    image 'amazon/aws-cli:2.23.7'
-                    args '--entrypoint ""'
-                }
-            }
-            steps {
-                withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
-                    script {
-                        // Crear bucket backup si no existe
-                        sh """
-                            aws s3api head-bucket --bucket ${BACKUP_BUCKET} || aws s3 mb s3://${BACKUP_BUCKET}
-                        """
-                        // Crear sub-bucket "JesusRamirez" dentro del bucket backup
-                        sh """
-                            aws s3api put-object --bucket ${BACKUP_BUCKET} --key JesusRamirez/
-                        """
-                        // Crear sub-bucket con formato de fecha dentro de "JesusRamirez"
-                        def timestamp = sh(
-                            returnStdout: true,
-                            script: "date +%Y_%m_%d_%H_%M_%S"
-                        ).trim()
-                        echo "Creando bucket con formato de fecha: ${timestamp} dentro de JesusRamirez..."
-                        sh """
-                            aws s3api put-object --bucket ${BACKUP_BUCKET} --key JesusRamirez/${timestamp}/
-                        """
-
-                        // Copiar contenido de bucket-codigo-jesus a JesusRamirez/${timestamp}/
-                        echo "Copiando contenido de ${S3_BUCKET} a ${BACKUP_BUCKET}/JesusRamirez/${timestamp}/..."
-                        sh """
-                            aws s3 sync s3://${S3_BUCKET}/ s3://${BACKUP_BUCKET}/JesusRamirez/${timestamp}/
-                        """
-                    }
-                }
-            }
-        }        
-
-        stage('Subir proyecto al bucket S3 de AWS ...') {
-            when {
-                not { branch 'develop' } // Ejecutar si NO es la rama `develop`
-                not { branch 'QA' }      // También omitir si es la rama `QA`
-                branch 'main'            // Ejecutar solo si la rama es `main`
             }
             agent {
                 docker {
@@ -117,16 +42,38 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
                     script {
-                        echo "Subiendo los archivos al bucket S3..."
-                        sh """
-                            aws s3 sync build/ s3://${S3_BUCKET} --delete
-                        """
+                        // Buscar la fecha máxima existente en el bucket de respaldo
+                        echo "Buscando el directorio más reciente en ${BACKUP_BUCKET}/JesusRamirez/..."
+                        def latestDir = sh(
+                            returnStdout: true,
+                            script: """
+                                aws s3 ls s3://${BACKUP_BUCKET}/JesusRamirez/ | awk '{print \$2}' | sort -r | head -n 1 | tr -d '/'
+                            """
+                        ).trim()
+                        echo "El directorio más reciente encontrado es: ${latestDir}"
+
+                        if (latestDir) {
+                            // Limpiar el contenido del bucket principal
+                            echo "Eliminando contenido actual del bucket principal ${S3_BUCKET}..."
+                            sh """
+                                aws s3 rm s3://${S3_BUCKET}/ --recursive
+                            """
+
+                            // Copiar el contenido del último backup al bucket principal
+                            echo "Restaurando contenido desde ${BACKUP_BUCKET}/JesusRamirez/${latestDir} a ${S3_BUCKET}..."
+                            sh """
+                                aws s3 sync s3://${BACKUP_BUCKET}/JesusRamirez/${latestDir}/ s3://${S3_BUCKET}/
+                            """
+                        } else {
+                            echo "No se encontró ningún directorio de respaldo. Restauración omitida."
+                        }
                     }
                 }
             }
         }
     }
 
+    
     post {
         success {
             mail to: 'luciojesusramirezgamarra@gmail.com',
@@ -145,7 +92,7 @@ pipeline {
         }
         failure {
             mail to: 'luciojesusramirezgamarra@gmail.com',
-                subject: "⚠️ Pipeline ${env.JOB_NAME} falló",
+                subject: " Pipeline ${env.JOB_NAME} falló",
                 body: """
                 Hola,
 
@@ -160,3 +107,4 @@ pipeline {
         }
     }
 }
+
