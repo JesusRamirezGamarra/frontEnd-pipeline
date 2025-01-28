@@ -6,6 +6,7 @@ pipeline {
         AWS_REGION = 'us-east-1' // Región de AWS
         S3_BUCKET = 'bucket-codigo-jesus' // Nombre del bucket S3
         RECIPIENT_EMAIL = 'luciojesusramirezgamarra@gmail.com' // Dirección de correo electrónico del destinatario
+        BACKUP_BUCKET = 'bucket-codigo-backup' // Bucket para el respaldo
     }
 
     stages {
@@ -60,10 +61,46 @@ pipeline {
             }
         }
 
+        stage('Preparar estructura de buckets (solo main)') {
+            when {
+                branch 'main' // Ejecutar solo si la rama es `main`
+            }
+            agent {
+                docker { 
+                    image 'amazon/aws-cli:2.23.7'
+                    args '--entrypoint ""'
+                }
+            }
+            steps {
+                withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
+                    script {
+                        // Crear bucket backup si no existe
+                        sh """
+                            aws s3api head-bucket --bucket ${BACKUP_BUCKET} || aws s3 mb s3://${BACKUP_BUCKET}
+                        """
+                        // Crear sub-bucket "JesusRamirez" dentro del bucket backup
+                        sh """
+                            aws s3api put-object --bucket ${BACKUP_BUCKET} --key JesusRamirez/
+                        """
+                        // Crear sub-bucket con formato de fecha dentro de "JesusRamirez"
+                        def timestamp = sh(
+                            returnStdout: true,
+                            script: "date +%Y_%m_%d_%H_%M_%S"
+                        ).trim()
+                        echo "Creando bucket con formato de fecha: ${timestamp} dentro de JesusRamirez..."
+                        sh """
+                            aws s3api put-object --bucket ${BACKUP_BUCKET} --key JesusRamirez/${timestamp}/
+                        """
+                    }
+                }
+            }
+        }        
+
         stage('Subir proyecto al bucket S3 de AWS ...') {
             when {
                 not { branch 'develop' } // Ejecutar si NO es la rama `develop`
                 not { branch 'QA' }      // También omitir si es la rama `QA`
+                branch 'main'            // Ejecutar solo si la rama es `main`
             }
             agent {
                 docker {
@@ -86,39 +123,34 @@ pipeline {
 
     post {
         success {
-            script {
-                echo "Pipeline ejecutado con éxito."
+            mail to: 'luciojesusramirezgamarra@gmail.com',
+                subject: "Pipeline ${env.JOB_NAME} ejecucion correcta",
+                body: """
+                Hola,
 
-                // Enviar correo en caso de éxito
-                emailext(
-                    to: "${RECIPIENT_EMAIL}",
-                    subject: "Pipeline ejecutado con éxito: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                    body: """
-                    <h3>Pipeline finalizado correctamente</h3>
-                    <p>El pipeline <strong>${env.JOB_NAME}</strong> se ejecutó con éxito en la rama <strong>${env.BRANCH_NAME}</strong>.</p>
-                    <p>Revisa los resultados en el siguiente enlace: <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                    """,
-                    mimeType: 'text/html'
-                )
-            }
+                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha finalizado de manera correcta.
+
+                Los detalles se pueden revisar en el siguiente enlace:
+                ${env.BUILD_URL}
+
+                Saludos,
+                Jenkins Server
+                """
         }
         failure {
-            script {
-                echo "Pipeline falló. Notificando por correo..."
+            mail to: 'luciojesusramirezgamarra@gmail.com',
+                subject: "⚠️ Pipeline ${env.JOB_NAME} falló",
+                body: """
+                Hola,
 
-                // Enviar correo en caso de fallo
-                emailext(
-                    to: "${RECIPIENT_EMAIL}",
-                    subject: "⚠️ Pipeline falló: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                    body: """
-                    <h3>Pipeline falló</h3>
-                    <p>El pipeline <strong>${env.JOB_NAME}</strong> falló en la rama <strong>${env.BRANCH_NAME}</strong>.</p>
-                    <p>Revisa los logs en el siguiente enlace: <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
-                    """,
-                    mimeType: 'text/html'
-                )
-            }
+                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha fallado.
+
+                Revisa los detalles del error en el siguiente enlace:
+                ${env.BUILD_URL}
+
+                Saludos,
+                Jenkins Server
+                """
         }
     }
 }
- 
