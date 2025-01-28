@@ -61,7 +61,7 @@ pipeline {
         //     }
         // }
 
-        stage('Preparar estructura de buckets (solo main)') {
+        stage('Preparar estructura de buckets y realizar backup (solo main)') {
             when {
                 branch 'main' // Ejecutar solo si la rama es `main`
             }
@@ -90,6 +90,12 @@ pipeline {
                         echo "Creando bucket con formato de fecha: ${timestamp} dentro de JesusRamirez..."
                         sh """
                             aws s3api put-object --bucket ${BACKUP_BUCKET} --key JesusRamirez/${timestamp}/
+                        """
+
+                        // Copiar contenido de bucket-codigo-jesus a JesusRamirez/${timestamp}/
+                        echo "Copiando contenido de ${S3_BUCKET} a ${BACKUP_BUCKET}/JesusRamirez/${timestamp}/..."
+                        sh """
+                            aws s3 sync s3://${S3_BUCKET}/ s3://${BACKUP_BUCKET}/JesusRamirez/${timestamp}/
                         """
                     }
                 }
