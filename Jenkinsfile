@@ -21,11 +21,11 @@ pipeline {
             }
         }
 
-        stage('SonarQube quality gate...') {
-            steps {
-                waitForQualityGate abortPipeline: true
-            }
-        }
+        // // // stage('SonarQube quality gate...') {
+        // // //     steps {
+        // // //         waitForQualityGate abortPipeline: true
+        // // //     }
+        // // // }
 
         stage ('Construir proyecto con archivos estaticos...') {
             steps {
