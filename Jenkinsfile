@@ -69,3 +69,4 @@ pipeline {
             echo "El pipeline falló. Revisa los errores."
         }
     }
+}
