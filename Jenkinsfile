@@ -10,16 +10,16 @@ pipeline {
             }
         }
 
-        stage('SonarQube Analisis...') {
-            steps {
-                script {
-                    def scannerHome = tool 'SonarScanner';
-                    withSonarQubeEnv() {
-                        sh "${scannerHome}/bin/sonar-scanner"
-                    }
-                }
-            }
-        }
+        // // // stage('SonarQube Analisis...') {
+        // // //     steps {
+        // // //         script {
+        // // //             def scannerHome = tool 'SonarScanner';
+        // // //             withSonarQubeEnv() {
+        // // //                 sh "${scannerHome}/bin/sonar-scanner"
+        // // //             }
+        // // //         }
+        // // //     }
+        // // // }
 
         // // // stage('SonarQube quality gate...') {
         // // //     steps {
@@ -48,7 +48,7 @@ pipeline {
         stage('Subir proyecto al bucket s3 AWS ...') {
             steps {
                 withAWS(credentials: 'aws-credentials-s3', region: 'us-east-1') {
-                    s3Upload(bucket: 'codigo-pipeline-bucket', includePathPattern: '**/*', path: 'build/')
+                    s3Upload(bucket: 'bucket-codigo-front', includePathPattern: '**/*', path: 'build/')
                                         
                 }
             }
