@@ -4,16 +4,16 @@ pipeline {
     stages {
         stage ('Instalar dependencias...') {
             agent {
-                docker { image 'node:16-alpine' }
+                docker { image 'node:16-alpine'}
             }
             steps {
                 sh 'npm install'
             }
         }
 
-        stage ('Construir proyecto con archivos estáticos...') {
+        stage ('Construir proyecto con archivos estaticos...') {
             agent {
-                docker { image 'node:16-alpine' }
+                docker { image 'node:16-alpine'}
             }
             steps {
                 sh 'npm run build'
@@ -33,10 +33,7 @@ pipeline {
             }
         }
 
-        stage('Validar conexión AWS ...') {
-            when {
-                not { branch 'develop' } // Ejecutar si NO es la rama `develop`
-            }
+        stage('Validar conexion AWS ...') {
             agent {
                 docker { 
                     image 'amazon/aws-cli:2.23.7'
@@ -46,18 +43,14 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-credentials-s3', region: 'us-east-1') {
                     script {
-                        def buckets = sh(returnStdout: true, script: 'aws s3 ls').trim()
-                        echo "Buckets disponibles en AWS: \n${buckets}"
+                        def buckets  = sh(returnStdout: true, script: 'aws s3 ls').trim()
+                        echo "Buckets disponibles en aws: \n${buckets}"
                     }
                 }
             }
         }
 
-        stage('Subir proyecto al bucket S3 de AWS ...') {
-            when {
-                not { branch 'develop' } // Ejecutar si NO es la rama `develop`
-                not { branch 'QA' }      // También omitir si es la rama `QA`
-            }
+        stage('Subir proyecto al bucket s3 AWS ...') {
             agent {
                 docker {
                     image 'amazon/aws-cli:2.23.7'
@@ -67,13 +60,13 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-credentials-s3', region: 'us-east-1') {
                     script {
-                        echo "Subiendo los archivos al bucket S3..."
+                        echo "Subiendo los archivos al bucket s3..."
                         sh '''
                             aws s3 sync build/ s3://bucket-codigo-jesus --delete
                         '''
-                    }
+                    }                   
                 }
             }
         }
     }
-}
+} 
