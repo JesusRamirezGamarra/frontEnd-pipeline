@@ -19,7 +19,13 @@ pipeline {
                         return
                     }
 
-                    // Buscar el directorio más reciente en el bucket de respaldo
+                    // Listar el contenido del bucket para depuración
+                    echo "Listando contenido en ${BACKUP_BUCKET}/JesusRamirez/ para depuración..."
+                    sh """
+                        aws s3 ls s3://${BACKUP_BUCKET}/JesusRamirez/
+                    """
+
+                    // Buscar el directorio más reciente
                     echo "Buscando el directorio más reciente en ${BACKUP_BUCKET}/JesusRamirez/..."
                     def latestDir = sh(
                         returnStdout: true,
