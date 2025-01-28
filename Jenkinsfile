@@ -62,7 +62,7 @@ pipeline {
                     script {
                         echo "Subiendo los archivos al bucket s3..."
                         sh '''
-                            aws s3 sync build/ s3://bucket-codigo-jesus --delete --acl public-read
+                            aws s3 sync build/ s3://bucket-codigo-jesus --delete
                         '''
                     }                   
                 }
