@@ -5,6 +5,7 @@ pipeline {
         AWS_REGION = 'us-east-1' // Región de AWS
         S3_BUCKET = 'bucket-codigo-jesus' // Nombre del bucket principal
         BACKUP_BUCKET = 'bucket-codigo-backup' // Nombre del bucket de respaldo
+        BRANCH_NAME = 'main' // Rama de Git
     }
 
     stages {
