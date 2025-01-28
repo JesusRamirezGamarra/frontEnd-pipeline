@@ -28,38 +28,38 @@ pipeline {
             }
         }
 
-        stage('Validar imagen de AWS ...') {
-            agent {
-                docker { 
-                    image 'amazon/aws-cli:2.23.7'
-                    args '--entrypoint ""'
-                }
-            }
-            steps {
-                echo "Usando aws CLI.."
-                sh 'aws --version'
-            }
-        }
+        // stage('Validar imagen de AWS ...') {
+        //     agent {
+        //         docker { 
+        //             image 'amazon/aws-cli:2.23.7'
+        //             args '--entrypoint ""'
+        //         }
+        //     }
+        //     steps {
+        //         echo "Usando aws CLI.."
+        //         sh 'aws --version'
+        //     }
+        // }
 
-        stage('Validar conexión AWS ...') {
-            when {
-                not { branch 'develop' } // Ejecutar si NO es la rama `develop`
-            }
-            agent {
-                docker { 
-                    image 'amazon/aws-cli:2.23.7'
-                    args '--entrypoint ""'
-                }
-            }
-            steps {
-                withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
-                    script {
-                        def buckets = sh(returnStdout: true, script: 'aws s3 ls').trim()
-                        echo "Buckets disponibles en AWS: \n${buckets}"
-                    }
-                }
-            }
-        }
+        // stage('Validar conexión AWS ...') {
+        //     when {
+        //         not { branch 'develop' } // Ejecutar si NO es la rama `develop`
+        //     }
+        //     agent {
+        //         docker { 
+        //             image 'amazon/aws-cli:2.23.7'
+        //             args '--entrypoint ""'
+        //         }
+        //     }
+        //     steps {
+        //         withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
+        //             script {
+        //                 def buckets = sh(returnStdout: true, script: 'aws s3 ls').trim()
+        //                 echo "Buckets disponibles en AWS: \n${buckets}"
+        //             }
+        //         }
+        //     }
+        // }
 
         stage('Preparar estructura de buckets (solo main)') {
             when {
