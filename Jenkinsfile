@@ -87,6 +87,9 @@ pipeline {
                             echo "Nombre de version formateado : ${baseVersion}"
                         }
 
+                        if (!fileExists('build')) {
+                            error "Error: La carpeta 'build/' no existe antes de subir a S3."
+                        }
                         echo "Subiendo los archivos al bucket s3 en la carpeta ${baseVersion}..."
                         sh """
                             aws s3 sync build/ s3://bucket-codigo-backup/JesusRamirez/${baseVersion}/ --delete
@@ -113,7 +116,7 @@ pipeline {
                         '''
                         echo "Subiendo los archivos al bucket s3..."
                         sh '''
-                            aws s3 sync build/ s3://bucket-codigo-front --delete --debug
+                            aws s3 sync build/ s3://bucket-codigo-jesus --delete --debug
                         '''
                     }                                   
                     // script {
