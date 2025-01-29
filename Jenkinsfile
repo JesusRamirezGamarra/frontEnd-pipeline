@@ -2,15 +2,14 @@ pipeline {
     agent any
 
     environment {
-        WEBHOOK_URL = 'https://c6c6-38-25-17-72.ngrok-free.app/github-webhook/' // URL del webhook
         AWS_REGION = 'us-east-1' // Región de AWS
-        S3_BUCKET = 'bucket-codigo-jesus' // Nombre del bucket S3
-        RECIPIENT_EMAIL = 'luciojesusramirezgamarra@gmail.com' // Dirección de correo electrónico del destinatario
-        BACKUP_BUCKET = 'bucket-codigo-backup' // Bucket para el respaldo
+        S3_BUCKET = 'bucket-codigo-jesus' // Bucket de destino final
+        BACKUP_BUCKET = 'bucket-codigo-backup' // Bucket de backup
+        RECIPIENT_EMAIL = 'luciojesusramirezgamarra@gmail.com' // Email de notificación
     }
 
     stages {
-        stage('Instalar dependencias...') {
+        stage('Instalar dependencias') {
             agent {
                 docker { image 'node:16-alpine' }
             }
@@ -19,7 +18,7 @@ pipeline {
             }
         }
 
-        stage('Construir proyecto con archivos estáticos...') {
+        stage('Construir proyecto con archivos estáticos') {
             agent {
                 docker { image 'node:16-alpine' }
             }
@@ -28,12 +27,12 @@ pipeline {
             }
         }
 
-        stage('Preparar estructura de buckets y realizar backup (solo main)') {
+        stage('Backup y versión incremental en S3') {
             when {
-                branch 'main' // Ejecutar solo si la rama es `main`
+                branch 'main' // Solo se ejecuta en la rama `main`
             }
             agent {
-                docker {
+                docker { 
                     image 'amazon/aws-cli:2.23.7'
                     args '--entrypoint ""'
                 }
@@ -41,9 +40,11 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
                     script {
+                        // Obtener la última versión en el bucket
                         def ultimaCarpetaDeBackup = sh(returnStdout: true, script: '''
-                            aws s3 ls s3://${BACKUP_BUCKET}/JesusRamirez/ | awk '{print $2}' | grep VERSION_ | sort | tail -n 1 || echo ""
+                            aws s3 ls s3://${BACKUP_BUCKET}/JesusRamirez/ | awk '{print $2}' | grep VERSION_ | sort -V | tail -n 1 || echo ""
                         ''').trim()
+
                         def baseVersion = 'VERSION_1.0'
 
                         if (ultimaCarpetaDeBackup) {
@@ -59,6 +60,7 @@ pipeline {
                             echo "No se encontraron versiones previas en el bucket, usando la versión base: ${baseVersion}"
                         }
 
+                        // Subir los archivos al bucket de backup con la nueva versión
                         echo "Subiendo los archivos al bucket de backup en la carpeta: ${baseVersion}..."
                         sh '''
                             if [ -d "build/" ]; then
@@ -73,11 +75,9 @@ pipeline {
             }
         }
 
-        stage('Subir proyecto al bucket S3 de AWS ...') {
+        stage('Subir proyecto final al bucket S3 de AWS') {
             when {
-                not { branch 'develop' } // Ejecutar si NO es la rama `develop`
-                not { branch 'QA' }      // También omitir si es la rama `QA`
-                branch 'main'            // Ejecutar solo si la rama es `main`
+                branch 'main' // Solo en `main`
             }
             agent {
                 docker {
@@ -88,32 +88,10 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
                     script {
-                        echo "Subiendo los archivos al bucket S3..."
+                        echo "Subiendo los archivos al bucket final en S3..."
                         sh """
                             aws s3 sync build/ s3://${S3_BUCKET} --delete
                         """
-                    }
-                }
-            }
-        }
-
-        stage('Restaurar carpeta específica desde S3') {
-            agent {
-                docker {
-                    image 'amazon/aws-cli:2.23.7'
-                    args '--entrypoint ""'
-                }
-            }
-            steps {
-                withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
-                    script {
-                        def restoreVersion = 'VERSION_1.0.5' // Cambia esta versión según lo necesites
-                        echo "Restaurando la carpeta ${restoreVersion} desde el bucket de backup..."
-                        sh '''
-                            mkdir -p restore/
-                            aws s3 sync s3://${BACKUP_BUCKET}/JesusRamirez/${restoreVersion}/ ./restore/ --exact-timestamps
-                        '''
-                        echo "Archivos restaurados en el directorio './restore/'."
                     }
                 }
             }
@@ -122,14 +100,17 @@ pipeline {
 
     post {
         success {
-            mail to: 'luciojesusramirezgamarra@gmail.com',
+            mail to: "${RECIPIENT_EMAIL}",
                 subject: "Pipeline ${env.JOB_NAME} ejecución correcta",
                 body: """
                 Hola,
 
-                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha finalizado de manera correcta.
+                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha finalizado correctamente.
 
-                Los detalles se pueden revisar en el siguiente enlace:
+                Se ha guardado una nueva versión del backup en:
+                s3://${BACKUP_BUCKET}/JesusRamirez/${baseVersion}
+
+                Detalles en:
                 ${env.BUILD_URL}
 
                 Saludos,
@@ -137,7 +118,7 @@ pipeline {
                 """
         }
         failure {
-            mail to: 'luciojesusramirezgamarra@gmail.com',
+            mail to: "${RECIPIENT_EMAIL}",
                 subject: "⚠️ Pipeline ${env.JOB_NAME} falló",
                 body: """
                 Hola,
@@ -145,11 +126,4 @@ pipeline {
                 El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha fallado.
 
                 Revisa los detalles del error en el siguiente enlace:
-                ${env.BUILD_URL}
-
-                Saludos,
-                Jenkins Server
-                """
-        }
-    }
-}
+  
