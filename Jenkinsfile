@@ -10,7 +10,7 @@ pipeline {
     }
 
     stages {
-        stage ('Instalar dependencias...') {
+        stage('Instalar dependencias...') {
             agent {
                 docker { image 'node:16-alpine' }
             }
@@ -19,7 +19,7 @@ pipeline {
             }
         }
 
-        stage ('Construir proyecto con archivos estáticos...') {
+        stage('Construir proyecto con archivos estáticos...') {
             agent {
                 docker { image 'node:16-alpine' }
             }
@@ -33,64 +33,45 @@ pipeline {
                 branch 'main' // Ejecutar solo si la rama es `main`
             }
             agent {
-                docker { 
+                docker {
                     image 'amazon/aws-cli:2.23.7'
                     args '--entrypoint ""'
                 }
             }
             steps {
                 withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
-                    script{
+                    script {
                         def ultimaCarpetaDeBackup = sh(returnStdout: true, script: '''
-                            aws s3 ls s3://${BACKUP_BUCKET}/JesusRamirez/ | awk '{print $2}' | grep VERSION_ | sort | tail -n 1
+                            aws s3 ls s3://${BACKUP_BUCKET}/JesusRamirez/ | awk '{print $2}' | grep VERSION_ | sort | tail -n 1 || echo ""
                         ''').trim()
                         def baseVersion = 'VERSION_1.0'
 
-                        echo "Ultima carpeta del bucket de backup: ${ultimaCarpetaDeBackup}"
-
-                        if( ultimaCarpetaDeBackup ){
-                            def currentVersion = ultimaCarpetaDeBackup.replace( 'VERSION_', '' ).replace( '/', '' )
-                            def versionNumber = currentVersion.toFloat() + 0.1
-
-                            baseVersion = String.format( 'VERSION_%.1f', versionNumber )
-
-                            echo "Creando la carpeta de backup con la version: ${baseVersion}..."
-                            echo "currentVersion: ${currentVersion}"
+                        if (ultimaCarpetaDeBackup) {
+                            try {
+                                def currentVersion = ultimaCarpetaDeBackup.replace('VERSION_', '').replace('/', '').toFloat()
+                                def versionNumber = currentVersion + 0.1
+                                baseVersion = String.format('VERSION_%.1f', versionNumber)
+                                echo "Última versión encontrada: ${ultimaCarpetaDeBackup}. Nueva versión: ${baseVersion}"
+                            } catch (Exception e) {
+                                error "Error procesando la versión: ${e.message}"
+                            }
+                        } else {
+                            echo "No se encontraron versiones previas en el bucket, usando la versión base: ${baseVersion}"
                         }
 
-                        echo "Subviendo los archivos al bucker de s3 en la carpeta : ${baseVersion}..."
+                        echo "Subiendo los archivos al bucket de backup en la carpeta: ${baseVersion}..."
                         sh '''
-                            aws s3 sync build/ s3://${BACKUP_BUCKET}/JesusRamirez/${baseVersion} --delete
+                            if [ -d "build/" ]; then
+                                aws s3 sync build/ s3://${BACKUP_BUCKET}/JesusRamirez/${baseVersion} --delete
+                            else
+                                echo "Error: La carpeta 'build/' no existe o está vacía."
+                                exit 1
+                            fi
                         '''
-
-                    // script {
-                    //     // Crear bucket backup si no existe
-                    //     sh """
-                    //         aws s3api head-bucket --bucket ${BACKUP_BUCKET} || aws s3 mb s3://${BACKUP_BUCKET}
-                    //     """
-                    //     // Crear sub-bucket "JesusRamirez" dentro del bucket backup
-                    //     sh """
-                    //         aws s3api put-object --bucket ${BACKUP_BUCKET} --key JesusRamirez/
-                    //     """
-                    //     // Crear sub-bucket con formato de fecha dentro de "JesusRamirez"
-                    //     def timestamp = sh(
-                    //         returnStdout: true,
-                    //         script: "date +%Y_%m_%d_%H_%M_%S"
-                    //     ).trim()
-                    //     echo "Creando bucket con formato de fecha: ${timestamp} dentro de JesusRamirez..."
-                    //     sh """
-                    //         aws s3api put-object --bucket ${BACKUP_BUCKET} --key JesusRamirez/${timestamp}/
-                    //     """
-
-                    //     // Copiar contenido de bucket-codigo-jesus a JesusRamirez/${timestamp}/
-                    //     echo "Copiando contenido de ${S3_BUCKET} a ${BACKUP_BUCKET}/JesusRamirez/${timestamp}/..."
-                    //     sh """
-                    //         aws s3 sync s3://${S3_BUCKET}/ s3://${BACKUP_BUCKET}/JesusRamirez/${timestamp}/
-                    //     """
-                    // }
+                    }
                 }
             }
-        }        
+        }
 
         stage('Subir proyecto al bucket S3 de AWS ...') {
             when {
@@ -115,12 +96,34 @@ pipeline {
                 }
             }
         }
+
+        stage('Restaurar carpeta específica desde S3') {
+            agent {
+                docker {
+                    image 'amazon/aws-cli:2.23.7'
+                    args '--entrypoint ""'
+                }
+            }
+            steps {
+                withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
+                    script {
+                        def restoreVersion = 'VERSION_1.0.5' // Cambia esta versión según lo necesites
+                        echo "Restaurando la carpeta ${restoreVersion} desde el bucket de backup..."
+                        sh '''
+                            mkdir -p restore/
+                            aws s3 sync s3://${BACKUP_BUCKET}/JesusRamirez/${restoreVersion}/ ./restore/ --exact-timestamps
+                        '''
+                        echo "Archivos restaurados en el directorio './restore/'."
+                    }
+                }
+            }
+        }
     }
 
     post {
         success {
             mail to: 'luciojesusramirezgamarra@gmail.com',
-                subject: "Pipeline ${env.JOB_NAME} ejecucion correcta",
+                subject: "Pipeline ${env.JOB_NAME} ejecución correcta",
                 body: """
                 Hola,
 
