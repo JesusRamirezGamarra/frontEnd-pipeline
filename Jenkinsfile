@@ -1,84 +1,32 @@
 pipeline {
     agent any
 
+    parameters {
+        string(name: 'BUCKET_FUENTE', defaultValue: 'bucket-codigo-backup', description: 'Nombre del bucket de origen.')
+        string(name: 'BUCKET_TARGET', defaultValue: 'bucket-codigo-front', description: 'Nombre del bucket de destino.')
+        string(name: 'CARPETA_USUARIO', defaultValue: 'jesusramirez', description: 'Carpeta del usuario.')
+        string(name: 'CARPETA_FUENTE', defaultValue: 'frontend-fuente-v1', description: 'Carpeta de origen dentro del bucket.')
+    }
+
     environment {
         AWS_REGION = 'us-east-1' // Región de AWS
-        S3_BUCKET = 'bucket-codigo-jesus' // Bucket de destino final
-        BACKUP_BUCKET = 'bucket-codigo-backup' // Bucket de backup
         RECIPIENT_EMAIL = 'luciojesusramirezgamarra@gmail.com' // Email de notificación
     }
 
     stages {
-        stage('Instalar dependencias') {
-            agent {
-                docker { image 'node:16-alpine' }
-            }
+        stage('Validar parámetros') {
             steps {
-                sh 'npm install'
-            }
-        }
-
-        stage('Construir proyecto con archivos estáticos') {
-            agent {
-                docker { image 'node:16-alpine' }
-            }
-            steps {
-                sh 'npm run build'
-            }
-        }
-
-        stage('Backup y versión incremental en S3') {
-            when {
-                branch 'main' // Solo se ejecuta en la rama `main`
-            }
-            agent {
-                docker { 
-                    image 'amazon/aws-cli:2.23.7'
-                    args '--entrypoint ""'
-                }
-            }
-            steps {
-                withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
-                    script {
-                        // Obtener la última versión en el bucket
-                        def ultimaCarpetaDeBackup = sh(returnStdout: true, script: '''
-                            aws s3 ls s3://${BACKUP_BUCKET}/JesusRamirez/ | awk '{print $2}' | grep VERSION_ | sort -V | tail -n 1 || echo ""
-                        ''').trim()
-
-                        def baseVersion = 'VERSION_1.0'
-
-                        if (ultimaCarpetaDeBackup) {
-                            try {
-                                def currentVersion = ultimaCarpetaDeBackup.replace('VERSION_', '').replace('/', '').toFloat()
-                                def versionNumber = currentVersion + 0.1
-                                baseVersion = String.format('VERSION_%.1f', versionNumber)
-                                echo "Última versión encontrada: ${ultimaCarpetaDeBackup}. Nueva versión: ${baseVersion}"
-                            } catch (Exception e) {
-                                error "Error procesando la versión: ${e.message}"
-                            }
-                        } else {
-                            echo "No se encontraron versiones previas en el bucket, usando la versión base: ${baseVersion}"
-                        }
-
-                        // Subir los archivos al bucket de backup con la nueva versión
-                        echo "Subiendo los archivos al bucket de backup en la carpeta: ${baseVersion}..."
-                        sh '''
-                            if [ -d "build/" ]; then
-                                aws s3 sync build/ s3://${BACKUP_BUCKET}/JesusRamirez/${baseVersion} --delete
-                            else
-                                echo "Error: La carpeta 'build/' no existe o está vacía."
-                                exit 1
-                            fi
-                        '''
-                    }
+                script {
+                    echo "Parámetros recibidos:"
+                    echo "BUCKET DE ORIGEN: ${params.BUCKET_FUENTE}"
+                    echo "BUCKET DE DESTINO: ${params.BUCKET_TARGET}"
+                    echo "CARPETA DE USUARIO: ${params.CARPETA_USUARIO}"
+                    echo "CARPETA DE ORIGEN: ${params.CARPETA_FUENTE}"
                 }
             }
         }
 
-        stage('Subir proyecto final al bucket S3 de AWS') {
-            when {
-                branch 'main' // Solo en `main`
-            }
+        stage('Mover archivos entre buckets S3') {
             agent {
                 docker {
                     image 'amazon/aws-cli:2.23.7'
@@ -88,10 +36,11 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
                     script {
-                        echo "Subiendo los archivos al bucket final en S3..."
+                        echo "Iniciando movimiento de archivos desde '${params.BUCKET_FUENTE}' a '${params.BUCKET_TARGET}'..."
                         sh """
-                            aws s3 sync build/ s3://${S3_BUCKET} --delete
+                            aws s3 mv s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_FUENTE}/ s3://${params.BUCKET_TARGET}/ --recursive
                         """
+                        echo "Movimiento completado."
                     }
                 }
             }
@@ -107,10 +56,11 @@ pipeline {
 
                 El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha finalizado correctamente.
 
-                Se ha guardado una nueva versión del backup en:
-                s3://${BACKUP_BUCKET}/JesusRamirez/${baseVersion}
+                Los archivos fueron movidos de:
+                - Origen: s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_FUENTE}/
+                - Destino: s3://${params.BUCKET_TARGET}/
 
-                Detalles en:
+                Detalles del pipeline:
                 ${env.BUILD_URL}
 
                 Saludos,
@@ -125,5 +75,12 @@ pipeline {
 
                 El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha fallado.
 
-                Revisa los detalles del error en el siguiente enlace:
-  
+                Verifica los logs en el siguiente enlace:
+                ${env.BUILD_URL}
+
+                Saludos,
+                Jenkins Server
+                """
+        }
+    }
+}
