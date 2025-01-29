@@ -17,6 +17,11 @@ pipeline {
             }
             steps {
                 sh 'npm run build'
+                script {
+                    if (!fileExists('build')) {
+                        error "Error: La carpeta 'build/' no existe después de la construcción."
+                    }
+                }                
             }
         }
 
@@ -102,11 +107,21 @@ pipeline {
             steps {
                 withAWS(credentials: 'aws-credentials-s3', region: 'us-east-1') {
                     script {
+                        echo "Verificando archivos antes de subir al bucket final..."
+                        sh '''
+                            ls -l build/
+                        '''
                         echo "Subiendo los archivos al bucket s3..."
                         sh '''
-                            aws s3 sync build/ s3://bucket-codigo-front --delete
+                            aws s3 sync build/ s3://bucket-codigo-front --delete --debug
                         '''
-                    }                   
+                    }                                   
+                    // script {
+                    //     echo "Subiendo los archivos al bucket s3..."
+                    //     sh '''
+                    //         aws s3 sync build/ s3://bucket-codigo-front --delete
+                    //     '''
+                    // }                   
                 }
             }
         }
