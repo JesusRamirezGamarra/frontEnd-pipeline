@@ -20,35 +20,35 @@ pipeline {
             }
         }
 
-        stage('Validar imagen de AWS ...') {
-            agent {
-                docker { 
-                    image 'amazon/aws-cli:2.23.7'
-                    args '--entrypoint ""'
-                }
-            }
-            steps {
-                echo "Usando aws CLI.."
-                sh 'aws --version'
-            }
-        }
+        // stage('Validar imagen de AWS ...') {
+        //     agent {
+        //         docker { 
+        //             image 'amazon/aws-cli:2.23.7'
+        //             args '--entrypoint ""'
+        //         }
+        //     }
+        //     steps {
+        //         echo "Usando aws CLI.."
+        //         sh 'aws --version'
+        //     }
+        // }
 
-        stage('Validar conexion AWS ...') {
-            agent {
-                docker { 
-                    image 'amazon/aws-cli:2.23.7'
-                    args '--entrypoint ""'
-                }
-            }
-            steps {
-                withAWS(credentials: 'aws-credentials-s3', region: 'us-east-1') {
-                    script {
-                        def buckets  = sh(returnStdout: true, script: 'aws s3 ls').trim()
-                        echo "Buckets disponibles en aws: \n${buckets}"
-                    }
-                }
-            }
-        }
+        // stage('Validar conexion AWS ...') {
+        //     agent {
+        //         docker { 
+        //             image 'amazon/aws-cli:2.23.7'
+        //             args '--entrypoint ""'
+        //         }
+        //     }
+        //     steps {
+        //         withAWS(credentials: 'aws-credentials-s3', region: 'us-east-1') {
+        //             script {
+        //                 def buckets  = sh(returnStdout: true, script: 'aws s3 ls').trim()
+        //                 echo "Buckets disponibles en aws: \n${buckets}"
+        //             }
+        //         }
+        //     }
+        // }
 
         stage('Subir archivos al bucket de respaldo ...') {
             agent {
