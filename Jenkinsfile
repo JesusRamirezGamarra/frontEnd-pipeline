@@ -105,41 +105,4 @@ pipeline {
             }
         }
     }
-
-    post {
-        success {
-            mail to: 'luciojesusramirezgamarra@gmail.com',
-                subject: "✅ Pipeline ${env.JOB_NAME} ejecutado correctamente",
-                body: """
-                Hola,
-
-                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha finalizado correctamente.
-
-                📌 Detalles del backup:
-                - Versión creada: ${newVersion}
-                - Ubicación en S3: s3://${env.BACKUP_BUCKET}/${env.BACKUP_PREFIX}${newVersion}/
-
-                Puedes revisar más detalles en:
-                ${env.BUILD_URL}
-
-                Saludos,
-                Jenkins Server
-                """
-        }
-        failure {
-            mail to: 'luciojesusramirezgamarra@gmail.com',
-                subject: "⚠️ Pipeline ${env.JOB_NAME} falló",
-                body: """
-                Hola,
-
-                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha fallado.
-
-                Revisa los detalles del error en el siguiente enlace:
-                ${env.BUILD_URL}
-
-                Saludos,
-                Jenkins Server
-                """
-        }
-    }
 }
