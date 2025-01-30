@@ -81,10 +81,18 @@ pipeline {
                         error("❌ Error: La carpeta build/ está vacía, no se puede desplegar en Vercel.")
                     }
 
+                    echo "Instalando dependencias..."
+                    sh """
+                        cp package.json build/
+                        cd build
+                        npm install --omit=dev
+                    """
+
+                    echo "Desplegando con Vercel..."
                     sh """
                         npm install -g vercel
                         cd build
-                        vercel deploy --prod --name front-vercel --token $VERCEL_TOKEN --yes --force
+                        vercel deploy --prod --token $VERCEL_TOKEN --yes --force
                     """
                 }
             }
