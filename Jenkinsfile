@@ -6,8 +6,8 @@ pipeline {
         AWS_REGION = 'us-east-1' // Región de AWS
         S3_BUCKET = 'bucket-codigo-jesus' // Nombre del bucket S3
         RECIPIENT_EMAIL = 'luciojesusramirezgamarra@gmail.com' // Correo del destinatario
-        BACKUP_BUCKET = 'bucket-codigo-backup' // Bucket para el respaldo
-        BACKUP_PREFIX = 'JesusRamirez/Vercel/' // Nueva estructura para los backups
+        BACKUP_BUCKET = 'bucket-codigo-backup' // Bucket de respaldo
+        BACKUP_PREFIX = 'JesusRamirez/Vercel/' // Ruta dentro del bucket backup
     }
 
     stages {
@@ -44,14 +44,14 @@ pipeline {
                     script {
                         // Crear el bucket de backup si no existe
                         sh """
-                            aws s3api head-bucket --bucket ${BACKUP_BUCKET} || aws s3 mb s3://${BACKUP_BUCKET}
+                            aws s3api head-bucket --bucket ${env.BACKUP_BUCKET} || aws s3 mb s3://${env.BACKUP_BUCKET}
                         """
 
                         // Obtener la última versión existente en el bucket
                         def lastVersion = sh(
                             returnStdout: true,
                             script: """
-                                aws s3 ls s3://${BACKUP_BUCKET}/${BACKUP_PREFIX} | grep Version_ | awk '{print $2}' | sort -V | tail -n1 | sed 's/\\///'
+                                aws s3 ls s3://${env.BACKUP_BUCKET}/${env.BACKUP_PREFIX} | grep Version_ | awk '{print \$2}' | sort -V | tail -n1 | sed 's/\\///'
                             """
                         ).trim()
 
@@ -68,13 +68,13 @@ pipeline {
 
                         // Crear la nueva carpeta en el bucket de backup
                         sh """
-                            aws s3api put-object --bucket ${BACKUP_BUCKET} --key ${BACKUP_PREFIX}${newVersion}/
+                            aws s3api put-object --bucket ${env.BACKUP_BUCKET} --key ${env.BACKUP_PREFIX}${newVersion}/
                         """
 
                         // Copiar contenido de `bucket-codigo-jesus` al nuevo backup
-                        echo "Copiando contenido de ${S3_BUCKET} a ${BACKUP_BUCKET}/${BACKUP_PREFIX}${newVersion}/..."
+                        echo "Copiando contenido de ${env.S3_BUCKET} a ${env.BACKUP_BUCKET}/${env.BACKUP_PREFIX}${newVersion}/..."
                         sh """
-                            aws s3 sync s3://${S3_BUCKET}/ s3://${BACKUP_BUCKET}/${BACKUP_PREFIX}${newVersion}/
+                            aws s3 sync s3://${env.S3_BUCKET}/ s3://${env.BACKUP_BUCKET}/${env.BACKUP_PREFIX}${newVersion}/
                         """
                     }
                 }
@@ -98,7 +98,7 @@ pipeline {
                     script {
                         echo "Subiendo los archivos al bucket S3..."
                         sh """
-                            aws s3 sync build/ s3://${S3_BUCKET} --delete
+                            aws s3 sync build/ s3://${env.S3_BUCKET} --delete
                         """
                     }
                 }
@@ -109,15 +109,15 @@ pipeline {
     post {
         success {
             mail to: 'luciojesusramirezgamarra@gmail.com',
-                subject: "✅ Pipeline ${env.JOB_NAME} ejecucion correcta",
+                subject: "✅ Pipeline ${env.JOB_NAME} ejecutado correctamente",
                 body: """
                 Hola,
 
-                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha finalizado de manera correcta.
+                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha finalizado correctamente.
 
-                Detalles del backup:
+                📌 Detalles del backup:
                 - Versión creada: ${newVersion}
-                - Ubicación en S3: s3://${BACKUP_BUCKET}/${BACKUP_PREFIX}${newVersion}/
+                - Ubicación en S3: s3://${env.BACKUP_BUCKET}/${env.BACKUP_PREFIX}${newVersion}/
 
                 Puedes revisar más detalles en:
                 ${env.BUILD_URL}
