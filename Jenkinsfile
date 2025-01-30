@@ -30,24 +30,53 @@ pipeline {
 
         stage('Descargar S3 hacia carpeta build') {
             when { expression { return params.DESPLEGAR_A_VERCEL } }
+            
+            // Agregar la imagen de AWS CLI para garantizar que aws CLI esté disponible
+            agent {
+                docker {
+                    image 'amazon/aws-cli:2.23.7'
+                    args '--entrypoint ""'
+                }
+            }
+
             steps {
                 withAWS(credentials: 'aws-credentials-s3', region: 'us-east-1') {
-                    sh "mkdir -p build"
-                    sh """
-                        aws s3 sync s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_RAMA}/${params.CARPETA_FUENTE}/ build/
-                    """
+                    script {
+                        sh "mkdir -p build"
+
+                        // Agregar mensaje de depuración
+                        echo "Descargando archivos desde S3..."
+                        sh """
+                            aws s3 ls s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_RAMA}/${params.CARPETA_FUENTE}/
+                        """
+
+                        // Descargar los archivos del bucket
+                        sh """
+                            aws s3 sync s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_RAMA}/${params.CARPETA_FUENTE}/ build/
+                        """
+
+                        echo "Listando archivos descargados..."
+                        sh "ls -la build/"
+                    }
                 }
             }
         }
 
         stage('Desplegar hacia vercel') {
             when { expression { return params.DESPLEGAR_A_VERCEL } }
+
+            agent {
+                docker { image 'node:18-alpine' }
+            }
+
             steps {
                 script {
+                    echo "Listando archivos antes del deploy..."
                     sh "ls -la build/"
+
                     def buildFiles = sh(script: "ls -1 build/ | wc -l", returnStdout: true).trim()
                     if (buildFiles == "0") {
-                        error("❌ Error: La carpeta build/ está vacía, no se puede desplegar en Vercel.")
+                        error("Error: La carpeta build/ está vacía, no se puede desplegar en Vercel.")
                     }
 
                     sh """
