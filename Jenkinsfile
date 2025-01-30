@@ -31,7 +31,6 @@ pipeline {
         stage('Descargar S3 hacia carpeta build') {
             when { expression { return params.DESPLEGAR_A_VERCEL } }
             
-            // Agregar la imagen de AWS CLI para garantizar que aws CLI esté disponible
             agent {
                 docker {
                     image 'amazon/aws-cli:2.23.7'
@@ -44,13 +43,16 @@ pipeline {
                     script {
                         sh "mkdir -p build"
 
-                        // Agregar mensaje de depuración
-                        echo "Descargando archivos desde S3..."
-                        sh """
-                            aws s3 ls s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_RAMA}/${params.CARPETA_FUENTE}/
-                        """
+                        echo "Verificando si la carpeta en S3 existe..."
+                        def carpetaExiste = sh(script: """
+                            aws s3 ls s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_RAMA}/ | grep ${params.CARPETA_FUENTE} || echo 'NO_EXISTE'
+                        """, returnStdout: true).trim()
 
-                        // Descargar los archivos del bucket
+                        if (carpetaExiste == "NO_EXISTE") {
+                            error("❌ ERROR: La carpeta S3 ${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_RAMA}/${params.CARPETA_FUENTE} no existe.")
+                        }
+
+                        echo "Descargando archivos desde S3..."
                         sh """
                             aws s3 sync s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_RAMA}/${params.CARPETA_FUENTE}/ build/
                         """
@@ -76,7 +78,7 @@ pipeline {
 
                     def buildFiles = sh(script: "ls -1 build/ | wc -l", returnStdout: true).trim()
                     if (buildFiles == "0") {
-                        error("Error: La carpeta build/ está vacía, no se puede desplegar en Vercel.")
+                        error("❌ Error: La carpeta build/ está vacía, no se puede desplegar en Vercel.")
                     }
 
                     sh """
@@ -86,6 +88,39 @@ pipeline {
                     """
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            mail to: 'luciojesusramirezgamarra@gmail.com',
+                subject: "✅ Pipeline ${env.JOB_NAME} ejecutado correctamente",
+                body: """
+                Hola,
+
+                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha finalizado correctamente.
+
+                Puedes revisar más detalles en:
+                ${env.BUILD_URL}
+
+                Saludos,
+                Jenkins Server
+                """
+        }
+        failure {
+            mail to: 'luciojesusramirezgamarra@gmail.com',
+                subject: "⚠️ Pipeline ${env.JOB_NAME} falló",
+                body: """
+                Hola,
+
+                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha fallado.
+
+                Revisa los detalles del error en el siguiente enlace:
+                ${env.BUILD_URL}
+
+                Saludos,
+                Jenkins Server
+                """
         }
     }
 }
