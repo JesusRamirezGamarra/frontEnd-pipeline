@@ -7,10 +7,10 @@ pipeline {
 
     parameters {
         string(name: 'BUCKET_FUENTE', defaultValue: 'bucket-codigo-backup', description: 'Nombre del bucket de origen..')
-        string(name: 'BUCKET_TARGET', defaultValue: 'bucket-codigo-front', description: 'Nombre del bucket objetivo..')
-        string(name: 'CARPETA_USUARIO', defaultValue: 'fernando', description: 'Nombre de la carpeta del usuario..')
+        string(name: 'BUCKET_TARGET', defaultValue: 'bucket-codigo-jesus', description: 'Nombre del bucket objetivo..')
+        string(name: 'CARPETA_USUARIO', defaultValue: 'JesusRamirez', description: 'Nombre de la carpeta del usuario..')
         string(name: 'CARPETA_FUENTE', defaultValue: 'VERSION_1.0', description: 'Nombre de la carpeta del bucket origen..')
-        string(name: 'CARPETA_RAMA', defaultValue: 'master', description: 'Nombre de la carpeta de la rama del proyecto')
+        string(name: 'CARPETA_RAMA', defaultValue: 'main', description: 'Nombre de la carpeta de la rama del proyecto')
         booleanParam(name: 'DESPLEGAR_A_VERCEL', defaultValue: false, description: 'Deseas desplegar en Vercel?')
     }
 
