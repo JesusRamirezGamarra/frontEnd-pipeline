@@ -7,11 +7,11 @@ pipeline {
 
     parameters {
         string(name: 'BUCKET_FUENTE', defaultValue: 'bucket-codigo-backup', description: 'Nombre del bucket de origen..')
-        string(name: 'BUCKET_TARGET', defaultValue: 'bucket-codigo-jesus', description: 'Nombre del bucket objetivo..')
+        string(name: 'BUCKET_TARGET', defaultValue: 'bucket-codigo-front', description: 'Nombre del bucket objetivo..')
         string(name: 'CARPETA_USUARIO', defaultValue: 'JesusRamirez', description: 'Nombre de la carpeta del usuario..')
-        string(name: 'CARPETA_FUENTE', defaultValue: 'VERSION_1.4', description: 'Nombre de la carpeta del bucket origen..')
+        string(name: 'CARPETA_FUENTE', defaultValue: 'VERSION_1.0', description: 'Nombre de la carpeta del bucket origen..')
         string(name: 'CARPETA_RAMA', defaultValue: 'main', description: 'Nombre de la carpeta de la rama del proyecto')
-        string(name: 'DESPLEGAR_A_VERCEL', defaultValue: false, description: 'Deseas desplegar en Vercel?')
+        booleanParam(name: 'DESPLEGAR_A_VERCEL', defaultValue: false, description: 'Deseas desplegar en Vercel?')
     }
 
 
@@ -51,14 +51,14 @@ pipeline {
                         sh "mkdir -p build"
 
                         sh """
-                            aws s3 sync s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_RAMA}/${params.CARPETA_FUENTE}/ build --recursive
+                            aws s3 sync s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_RAMA}/${params.CARPETA_FUENTE}/ build/
                         """
                     }                   
                 }
             }
         }
 
-        stage('Descargar hacia vercel.....') {
+        stage('Desplegar hacia vercel.....') {
             agent {
                 docker { image 'node:18-alpine'}
             }
@@ -97,7 +97,7 @@ pipeline {
                     script {
                         echo "Moviendo archivos entre buckets s3..."
                         sh """
-                            aws s3 mv s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_FUENTE}/ s3://${params.BUCKET_TARGET}/ --recursive
+                            aws s3 mv s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_RAMA}/${params.CARPETA_FUENTE}/ s3://${params.BUCKET_TARGET}/ --recursive
                         """
                     }                   
                 }
