@@ -1,106 +1,92 @@
 pipeline {
     agent any
 
+    environment {
+        WEBHOOK_URL = 'https://c6c6-38-25-17-72.ngrok-free.app/github-webhook/' // URL del webhook
+        AWS_REGION = 'us-east-1' // Región de AWS
+        S3_BUCKET = 'bucket-codigo-jesus' // Nombre del bucket S3
+        RECIPIENT_EMAIL = 'luciojesusramirezgamarra@gmail.com' // Correo del destinatario
+        BACKUP_BUCKET = 'bucket-codigo-backup' // Bucket de respaldo
+        BACKUP_PREFIX = 'JesusRamirez/main/' // Ruta dentro del bucket backup
+    }
+
     stages {
         stage ('Instalar dependencias...') {
             agent {
-                docker { image 'node:16-alpine'}
+                docker { image 'node:16-alpine' }
             }
             steps {
                 sh 'npm install'
             }
         }
 
-        stage ('Construir proyecto con archivos estaticos...') {
+        stage ('Construir proyecto con archivos estáticos...') {
             agent {
-                docker { image 'node:16-alpine'}
+                docker { image 'node:16-alpine' }
             }
             steps {
                 sh 'npm run build'
-                script {
-                    if (!fileExists('build')) {
-                        error "Error: La carpeta 'build/' no existe después de la construcción."
-                    }
-                }                
             }
         }
 
-        // stage('Validar imagen de AWS ...') {
-        //     agent {
-        //         docker { 
-        //             image 'amazon/aws-cli:2.23.7'
-        //             args '--entrypoint ""'
-        //         }
-        //     }
-        //     steps {
-        //         echo "Usando aws CLI.."
-        //         sh 'aws --version'
-        //     }
-        // }
-
-        // stage('Validar conexion AWS ...') {
-        //     agent {
-        //         docker { 
-        //             image 'amazon/aws-cli:2.23.7'
-        //             args '--entrypoint ""'
-        //         }
-        //     }
-        //     steps {
-        //         withAWS(credentials: 'aws-credentials-s3', region: 'us-east-1') {
-        //             script {
-        //                 def buckets  = sh(returnStdout: true, script: 'aws s3 ls').trim()
-        //                 echo "Buckets disponibles en aws: \n${buckets}"
-        //             }
-        //         }
-        //     }
-        // }
-
-        stage('Subir archivos al bucket de respaldo ...') {
+        stage('Preparar estructura de buckets y realizar backup (solo main)') {
+            when {
+                branch 'main' // Solo ejecutar en la rama `main`
+            }
             agent {
-                docker {
+                docker { 
                     image 'amazon/aws-cli:2.23.7'
                     args '--entrypoint ""'
                 }
             }
             steps {
-                withAWS(credentials: 'aws-credentials-s3', region: 'us-east-1') {
+                withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
                     script {
-                        def ultimaCarpetaDeBackup = sh(returnStdout: true, script: '''
-                            aws s3 ls s3://bucket-codigo-backup/JesusRamirez/ | awk '{print $2}' | grep VERSION_ | sort | tail -n 1
-                        ''').trim()
-
-                        echo "Ultima carpeta del bucket backup: ${ultimaCarpetaDeBackup}"
-
-                        def baseVersion = 'VERSION_1.0'
-
-                        if (ultimaCarpetaDeBackup) {
-                            def currentVersion = ultimaCarpetaDeBackup.replace('VERSION_','').replace('/', '')
-
-                            echo "Version actual: ${currentVersion}"
-
-                            def versionNumber = currentVersion.toFloat() + 0.1
-
-                            echo "Numero de Version aumentado : ${versionNumber}"
-
-                            baseVersion = String.format("VERSION_%.1f", versionNumber)
-
-                            echo "Nombre de version formateado : ${baseVersion}"
-                        }
-
-                        if (!fileExists('build')) {
-                            error "Error: La carpeta 'build/' no existe antes de subir a S3."
-                        }
-                        echo "Subiendo los archivos al bucket s3 en la carpeta ${baseVersion}..."
+                        // Crear el bucket de backup si no existe
                         sh """
-                            aws s3 sync build/ s3://bucket-codigo-backup/JesusRamirez/${baseVersion}/ --delete
+                            aws s3api head-bucket --bucket ${env.BACKUP_BUCKET} || aws s3 mb s3://${env.BACKUP_BUCKET}
                         """
-                    }                   
+
+                        // Obtener la última versión existente en el bucket
+                        def lastVersion = sh(
+                            returnStdout: true,
+                            script: """
+                                aws s3 ls s3://${env.BACKUP_BUCKET}/${env.BACKUP_PREFIX} | grep Version_ | awk '{print \$2}' | sort -V | tail -n1 | sed 's/\\///'
+                            """
+                        ).trim()
+
+                        // Si no hay versiones previas, comenzar desde 1.0
+                        def newVersion
+                        if (lastVersion) {
+                            def versionNumber = lastVersion.replace("Version_", "").toFloat() + 0.1
+                            newVersion = sprintf("Version_%.1f", versionNumber)
+                        } else {
+                            newVersion = "Version_1.0"
+                        }
+
+                        echo "Nueva versión de backup: ${newVersion}"
+
+                        // Crear la nueva carpeta en el bucket de backup
+                        sh """
+                            aws s3api put-object --bucket ${env.BACKUP_BUCKET} --key ${env.BACKUP_PREFIX}${newVersion}/
+                        """
+
+                        // Copiar contenido de `bucket-codigo-jesus` al nuevo backup
+                        echo "Copiando contenido de ${env.S3_BUCKET} a ${env.BACKUP_BUCKET}/${env.BACKUP_PREFIX}${newVersion}/..."
+                        sh """
+                            aws s3 sync s3://${env.S3_BUCKET}/ s3://${env.BACKUP_BUCKET}/${env.BACKUP_PREFIX}${newVersion}/
+                        """
+                    }
                 }
             }
-        }
+        }        
 
-
-        stage('Subir proyecto al bucket s3 AWS ...') {
+        stage('Subir proyecto al bucket S3 de AWS ...') {
+            when {
+                not { branch 'develop' } // No ejecutar en la rama `develop`
+                not { branch 'QA' }      // No ejecutar en la rama `QA`
+                branch 'main'            // Ejecutar solo en la rama `main`
+            }
             agent {
                 docker {
                     image 'amazon/aws-cli:2.23.7'
@@ -108,25 +94,52 @@ pipeline {
                 }
             }
             steps {
-                withAWS(credentials: 'aws-credentials-s3', region: 'us-east-1') {
+                withAWS(credentials: 'aws-credentials-s3', region: "${AWS_REGION}") {
                     script {
-                        echo "Verificando archivos antes de subir al bucket final..."
-                        sh '''
-                            ls -l build/
-                        '''
-                        echo "Subiendo los archivos al bucket s3..."
-                        sh '''
-                            aws s3 sync build/ s3://bucket-codigo-jesus --delete 
-                        '''
-                    }                                   
-                    // script {
-                    //     echo "Subiendo los archivos al bucket s3..."
-                    //     sh '''
-                    //         aws s3 sync build/ s3://bucket-codigo-front --delete
-                    //     '''
-                    // }                   
+                        echo "Subiendo los archivos al bucket S3..."
+                        sh """
+                            aws s3 sync build/ s3://${env.S3_BUCKET} --delete
+                        """
+                    }
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            mail to: 'luciojesusramirezgamarra@gmail.com',
+                subject: "✅ Pipeline ${env.JOB_NAME} ejecutado correctamente",
+                body: """
+                Hola,
+
+                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha finalizado correctamente.
+
+                📌 Detalles del backup:
+                - Versión creada: ${newVersion}
+                - Ubicación en S3: s3://${env.BACKUP_BUCKET}/${env.BACKUP_PREFIX}${newVersion}/
+
+                Puedes revisar más detalles en:
+                ${env.BUILD_URL}
+
+                Saludos,
+                Jenkins Server
+                """
+        }
+        failure {
+            mail to: 'luciojesusramirezgamarra@gmail.com',
+                subject: "⚠️ Pipeline ${env.JOB_NAME} falló",
+                body: """
+                Hola,
+
+                El pipeline '${env.JOB_NAME}' (Build #${env.BUILD_NUMBER}) ha fallado.
+
+                Revisa los detalles del error en el siguiente enlace:
+                ${env.BUILD_URL}
+
+                Saludos,
+                Jenkins Server
+                """
         }
     }
 }
