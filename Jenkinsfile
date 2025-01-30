@@ -6,6 +6,7 @@ pipeline {
         string(name: 'BUCKET_TARGET', defaultValue: 'bucket-codigo-jesus', description: 'Nombre del bucket objetivo..')
         string(name: 'CARPETA_USUARIO', defaultValue: 'JesusRamirez', description: 'Nombre de la carpeta del usuario..')
         string(name: 'CARPETA_FUENTE', defaultValue: 'frontend_fuente_v1', description: 'Nombre de la carpeta del bucket origen..')
+        string(name: 'BRANCH_NAME', defaultValue: 'QA', description: 'Nombre de la Rama name /  bucket destino ..')
     }
 
 
@@ -18,6 +19,7 @@ pipeline {
                     echo "BUCKET DE DESTINO: ${params.BUCKET_TARGET}"
                     echo "CARPETA DE USUARIO: ${params.CARPETA_USUARIO}"
                     echo "CARPETA DE ORIGEN: ${params.CARPETA_FUENTE}"
+                    echo "BRANCH_NAME: ${params.BRANCH_NAME}"
                 }
             }
         }
@@ -34,7 +36,7 @@ pipeline {
                     script {
                         echo "Listando archivos en el bucket fuente antes de copiar..."
                         sh """
-                            aws s3 ls s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.CARPETA_FUENTE}/ --recursive
+                            aws s3 ls s3://${params.BUCKET_FUENTE}/${params.CARPETA_USUARIO}/${params.BRANCH_NAME}/${params.CARPETA_FUENTE}/ --recursive
                         """
                     }
                 }
