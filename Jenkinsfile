@@ -7,7 +7,7 @@ pipeline {
     stages {
         stage ('Instalar dependencias...') {
             agent {
-                docker { image 'node:16-alpine'}
+                docker { image 'node:18-alpine'}
             }
             steps {
                 sh 'npm install'
@@ -16,7 +16,7 @@ pipeline {
 
         stage ('Construir proyecto con archivos estaticos...') {
             agent {
-                docker { image 'node:16-alpine'}
+                docker { image 'node:18-alpine'}
             }
             steps {
                 sh 'npm run build'
@@ -25,7 +25,7 @@ pipeline {
 
         stage ('Deploy hacia Vercel...') {
             agent {
-                docker { image 'node:16-alpine'}
+                docker { image 'node:18-alpine'}
             }
             steps {
                 sh """
